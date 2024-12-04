@@ -114,10 +114,44 @@ def add_categories(df1, df2):
     df1['SUBCATEGORÍA'] = df1['Codigo_Diagnostico'].map(lambda x: mapping.get(x, {}).get('SUBCATEGORÍA'))
 
     print(df1.head()) 
-    df1.to_excel('output.xlsx', index=False)
+    # df1.to_excel('output.xlsx', index=False)
+    return df1
 
+def order_by_category(df):
+    # Calcula la sumatoria de la columna "COUNT" para cada grupo de categorías
+    df_grouped = df.groupby('CATEGORÍA')['Count'].sum().reset_index()
+    df_grouped.columns = ['CATEGORÍA', 'SUM_COUNT']
 
-file_name = urgencies
+    # Ordena los grupos por la sumatoria en orden descendente
+    df_grouped = df_grouped.sort_values(by='SUM_COUNT', ascending=False)
+
+    # Une el DataFrame original con el DataFrame de grupos ordenados
+    df_ordered = pd.merge(df, df_grouped, on='CATEGORÍA')
+
+    # Ordena el DataFrame resultante por la sumatoria y luego por la columna "COUNT" en orden descendente
+    df_ordered = df_ordered.sort_values(by=['SUM_COUNT', 'Count'], ascending=[False, False])
+    
+    # df_ordered.to_excel('output.xlsx', index=False)
+    return df_ordered
+
+def add_percentage_column(df):
+    df['PERCENTAGE_GROUP'] = (df['Count'] / df['SUM_COUNT']) * 100
+    # df.to_excel('output.xlsx', index=False)
+    return df
+
+def add_total_count(df):
+    total_count = df['Count'].sum()
+    df['TOTAL_COUNT'] = total_count
+    # df.to_excel('output.xlsx', index=False)
+    return df
+
+def add_group_percentage_column(file_name, df):
+    total_count = df['TOTAL_COUNT'].iloc[0]
+    df['GROUP_PERCENTAGE'] = (df['SUM_COUNT'] / total_count) * 100
+    df.to_excel(str(file_name) + '_processed.xlsx', index=False)
+    return df
+
+file_name = surgery
 cid10_file = cid10
 
 df = load_data(file_name)
@@ -126,6 +160,10 @@ df = remove_rows(file_name, df)
 df = count_codes(file_name, df)
 
 df2 = load_data(cid10_file)
-add_categories(df , df2)
+df = add_categories(df , df2)
+df = order_by_category(df)
+df = add_percentage_column(df)
+df = add_total_count(df)
+df = add_group_percentage_column(file_name, df)
 
 # df = create_CID10()
