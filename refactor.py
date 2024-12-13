@@ -1,4 +1,12 @@
 import pandas as pd
+import threading
+import time
+from tqdm import tqdm
+from rich import print
+from rich.progress import Progress
+
+
+
 
 surgery = "Cirugia"
 outpatient_clinic = "Consulta externa"
@@ -66,7 +74,7 @@ def remove_rows(file_name, df):
         df = df[df['VALIDACION INTERNACION'] == 'INTERNACION']
     elif(file_name == urgencies):
         df = df[df['Clase de consulta'] == 'Urgencias']
-    print(df.head()) 
+    # print(df.head()) 
     return df
 
 def count_codes(file_name, df):
@@ -113,7 +121,7 @@ def add_categories(df1, df2):
     df1['CATEGORÍA'] = df1['Codigo_Diagnostico'].map(lambda x: mapping.get(x, {}).get('CATEGORÍA'))
     df1['SUBCATEGORÍA'] = df1['Codigo_Diagnostico'].map(lambda x: mapping.get(x, {}).get('SUBCATEGORÍA'))
 
-    print(df1.head()) 
+    # print(df1.head()) 
     # df1.to_excel('output.xlsx', index=False)
     return df1
 
@@ -151,19 +159,122 @@ def add_group_percentage_column(file_name, df):
     df.to_excel(str(file_name) + '_processed.xlsx', index=False)
     return df
 
-file_name = surgery
+# file_name = surgery
 cid10_file = cid10
 
-df = load_data(file_name)
-df = delete_columns(file_name, df)
-df = remove_rows(file_name, df)
-df = count_codes(file_name, df)
+# df = load_data(file_name)
+# df = delete_columns(file_name, df)
+# df = remove_rows(file_name, df)
+# df = count_codes(file_name, df)
 
-df2 = load_data(cid10_file)
-df = add_categories(df , df2)
-df = order_by_category(df)
-df = add_percentage_column(df)
-df = add_total_count(df)
-df = add_group_percentage_column(file_name, df)
+# df2 = load_data(cid10_file)
+# df = add_categories(df , df2)
+# df = order_by_category(df)
+# df = add_percentage_column(df)
+# df = add_total_count(df)
+# df = add_group_percentage_column(file_name, df)
 
 # df = create_CID10()
+
+def mostrar_menu():
+    print("[?] ¿Qué deseas hacer?")
+    print("[1] Crear archivo CID10")
+    print("[2] Cargar archivo CID10")
+    print("[3] Salir\n")
+def mostrar_menu_servicios():
+    print("\n[?] ¿Qué servicio deseas procesar?")
+    print("[1] Cirugía")
+    print("[2] Consulta Externa")
+    print("[3] Internación")
+    print("[4] Urgencias")
+    print("[5] Salir\n")
+
+class Imprimir:
+    def __init__(self):
+        self.lock = threading.Lock()
+
+    def imprimir(self, mensaje, end='\n'):
+        with self.lock:
+            print(mensaje, end=end)
+
+def mostrar_progreso(event, imprimir):
+    spinner_chars = ['|', '/', '-', '\\']
+    i = 0
+    while not event.is_set():
+        char = spinner_chars[i % len(spinner_chars)]
+        imprimir.imprimir(f"[!] Procesando... {char}", end='\r')
+        i += 1
+        time.sleep(0.1)
+
+
+def process_service(file_name, df2):
+    imprimir = Imprimir()
+
+    # Crear un evento para controlar el hilo del spinner
+    event = threading.Event()
+
+    # Crear un hilo para el spinner
+    hilo_progreso = threading.Thread(target=mostrar_progreso, args=(event, imprimir))
+    hilo_progreso.daemon = True
+    hilo_progreso.start()
+
+    # Ejecutar tareas (simuladas con sleep para dar tiempo a ver la animación)
+    df = load_data(file_name)
+    df = delete_columns(file_name, df)
+    df = remove_rows(file_name, df)
+    df = count_codes(file_name, df)
+    df = add_categories(df, df2)
+    df = order_by_category(df)
+    df = add_percentage_column(df)
+    df = add_total_count(df)
+    df = add_group_percentage_column(file_name, df)
+
+    # Cuando se termina el procesamiento, señalizar al spinner que se detenga
+    event.set()
+def main():
+    show_first_menu = True
+    while True:
+        if show_first_menu:
+            mostrar_menu()
+            show_first_menu = False
+            opcion = input("[!] Elija una opción: ")
+            if opcion == "1":
+                # Lógica para crear el archivo CID10
+                print("[!] Creando archivo CID10...")
+                create_CID10()
+                df2 = load_data(cid10_file)
+                print("\n[!] Archivo CID10 creado exitosamente.")
+                print("[!] Archivo CID10 cargado exitosamente.\n")
+            elif opcion == "2":
+                # Lógica para cargar el archivo CID10
+                print("[!] Cargando archivo CID10...")
+                df2 = load_data(cid10_file)
+                print("[!] Archivo CID10 cargado exitosamente.\n")
+            elif opcion == "3":
+                print("[!] Saliendo...\n")
+                break
+            else:
+                print("[!] Opción inválida. Por favor, elija una opción válida.\n")
+
+        mostrar_menu_servicios()
+        opcion_servicio = input("[!] Elija un servicio: ")
+        if opcion_servicio == "1":
+            file_name = surgery
+        elif opcion_servicio == "2":
+            file_name = outpatient_clinic
+        elif opcion_servicio == "3":
+            file_name = internment
+        elif opcion_servicio == "4":
+            file_name = urgencies
+        elif opcion_servicio == "5":
+            print("[!] Saliendo...\n")
+            break
+        else:
+            print("[!] Opción inválida. Por favor, elija una opción válida.\n")
+            continue
+        print(f"[!] Procesando servicio: {file_name}\n")
+        process_service(file_name, df2)
+        print("[!] Procesamiento realizado exitosamente.\n")
+
+if __name__ == "__main__":
+    main()
