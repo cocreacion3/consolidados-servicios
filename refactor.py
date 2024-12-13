@@ -14,6 +14,7 @@ internment = "Internacion"
 urgencies = "Urgencias"
 raw_cid10 = "raw_CID10"
 cid10 = "CID10"
+cid10_file = cid10
 
 def load_data(file_name):
     """Load data from an Excel file based on the given file name."""
@@ -40,7 +41,7 @@ def create_CID10():
     df = delete_columns(raw_cid10, df)
     df = df.rename(columns={'COD_4.1': 'Codigo_Diagnostico'})
     df.to_excel('CIE10/' + str(cid10) + '_clean.xlsx', index=False)
-    print(df.head()) 
+    # print(df.head()) 
     return df
 
 def delete_columns(file_name, df):
@@ -156,39 +157,31 @@ def add_total_count(df):
 def add_group_percentage_column(file_name, df):
     total_count = df['TOTAL_COUNT'].iloc[0]
     df['GROUP_PERCENTAGE'] = (df['SUM_COUNT'] / total_count) * 100
-    df.to_excel(str(file_name) + '_processed.xlsx', index=False)
+    df.to_excel('Data-procesada/' + str(file_name) + '_processed.xlsx', index=False)
     return df
 
-# file_name = surgery
-cid10_file = cid10
 
-# df = load_data(file_name)
-# df = delete_columns(file_name, df)
-# df = remove_rows(file_name, df)
-# df = count_codes(file_name, df)
-
-# df2 = load_data(cid10_file)
-# df = add_categories(df , df2)
-# df = order_by_category(df)
-# df = add_percentage_column(df)
-# df = add_total_count(df)
-# df = add_group_percentage_column(file_name, df)
-
-# df = create_CID10()
-
+def show_instructions():
+    print("[!] Instrucciones:")
+    print("\n[!] Nombre de archivo CID10 base:")
+    print("     CIE10\CIE10 AGRUPADO.xlsx\n")
+    print("[!] Nombres de archivos base:")
+    print("     Data-cruda\BD Cirugía.xlsx")
+    print("     Data-cruda\BD Consulta externa.xlsx.xlsx")
+    print("     Data-cruda\BD Internación.xlsx.xlsx")
+    print("     Data-cruda\BD Urgencias.xlsx\n")
 def mostrar_menu():
     print("[?] ¿Qué deseas hacer?")
     print("[1] Crear archivo CID10")
     print("[2] Cargar archivo CID10")
     print("[3] Salir\n")
 def mostrar_menu_servicios():
-    print("\n[?] ¿Qué servicio deseas procesar?")
-    print("[1] Cirugía")
-    print("[2] Consulta Externa")
-    print("[3] Internación")
-    print("[4] Urgencias")
+    print("\n[?] ¿Qué deseas hacer?")
+    print("[1] Procesar Cirugía")
+    print("[2] Procesar Consulta Externa")
+    print("[3] Procesar Internación")
+    print("[4] Procesar Urgencias")
     print("[5] Salir\n")
-
 class Imprimir:
     def __init__(self):
         self.lock = threading.Lock()
@@ -196,17 +189,14 @@ class Imprimir:
     def imprimir(self, mensaje, end='\n'):
         with self.lock:
             print(mensaje, end=end)
-
 def mostrar_progreso(event, imprimir):
     spinner_chars = ['|', '/', '-', '\\']
     i = 0
     while not event.is_set():
         char = spinner_chars[i % len(spinner_chars)]
-        imprimir.imprimir(f"[!] Procesando... {char}", end='\r')
+        imprimir.imprimir(f"[!] Procesando...{char}", end='\r')
         i += 1
         time.sleep(0.1)
-
-
 def process_service(file_name, df2):
     imprimir = Imprimir()
 
@@ -232,6 +222,7 @@ def process_service(file_name, df2):
     # Cuando se termina el procesamiento, señalizar al spinner que se detenga
     event.set()
 def main():
+    show_instructions()
     show_first_menu = True
     while True:
         if show_first_menu:
@@ -255,26 +246,43 @@ def main():
                 break
             else:
                 print("[!] Opción inválida. Por favor, elija una opción válida.\n")
-
-        mostrar_menu_servicios()
-        opcion_servicio = input("[!] Elija un servicio: ")
-        if opcion_servicio == "1":
-            file_name = surgery
-        elif opcion_servicio == "2":
-            file_name = outpatient_clinic
-        elif opcion_servicio == "3":
-            file_name = internment
-        elif opcion_servicio == "4":
-            file_name = urgencies
-        elif opcion_servicio == "5":
-            print("[!] Saliendo...\n")
-            break
-        else:
-            print("[!] Opción inválida. Por favor, elija una opción válida.\n")
-            continue
-        print(f"[!] Procesando servicio: {file_name}\n")
-        process_service(file_name, df2)
-        print("[!] Procesamiento realizado exitosamente.\n")
+                show_first_menu = True
+        if show_first_menu is False:
+            mostrar_menu_servicios()
+            opcion_servicio = input("[!] Elija una opción: ")
+            if opcion_servicio == "1":
+                file_name = surgery
+            elif opcion_servicio == "2":
+                file_name = outpatient_clinic
+            elif opcion_servicio == "3":
+                file_name = internment
+            elif opcion_servicio == "4":
+                file_name = urgencies
+            elif opcion_servicio == "5":
+                print("[!] Saliendo...\n")
+                break
+            else:
+                print("[!] Opción inválida. Por favor, elija una opción válida.\n")
+                continue
+            print(f"[!] Procesando servicio: {file_name} ")
+            process_service(file_name, df2)
+            print("[!] Procesamiento realizado exitosamente.\n")
 
 if __name__ == "__main__":
     main()
+
+
+
+# df = load_data(file_name)
+# df = delete_columns(file_name, df)
+# df = remove_rows(file_name, df)
+# df = count_codes(file_name, df)
+
+# df2 = load_data(cid10_file)
+# df = add_categories(df , df2)
+# df = order_by_category(df)
+# df = add_percentage_column(df)
+# df = add_total_count(df)
+# df = add_group_percentage_column(file_name, df)
+
+# df = create_CID10()
