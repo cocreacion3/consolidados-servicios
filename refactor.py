@@ -41,7 +41,7 @@ def load_data(file_name):
 def create_CID10():
     df = load_data(raw_cid10)
     df = delete_columns(raw_cid10, df)
-    df = df.rename(columns={'COD_4.1': 'Codigo_Diagnostico'})
+    df = df.rename(columns={'COD_4': 'Codigo_Diagnostico'})
     df.to_excel('CIE10/' + str(cid10) + '_clean.xlsx', index=False)
     # print(df.head()) 
     return df
@@ -56,7 +56,7 @@ def delete_columns(file_name, df):
         outpatient_clinic: ['VALIDACIÓN JUNTA DIRECTIVA Y PRODUCCIÓN AMBULATORIO', 'Cod Diag Princl', 'Diag.Princ'],
         internment: ['VALIDACION INTERNACION', 'Código diagnóstico alta', 'Texto diagnóstico alta'],
         urgencies: ['Clase de consulta', 'Cod Diag Princl', 'Diag.Princ'],
-        raw_cid10: ['COD_4.1', 'CATEGORÍA', 'SUBCATEGORÍA']
+        raw_cid10: ['COD_4', 'CATEGORÍA', 'SUBCATEGORÍA']
     }[file_name]
 
     # Filter the columns
@@ -109,7 +109,7 @@ def count_codes(file_name, df):
         df_sorted = df_sorted.rename(columns={diag_col: 'Diagnostico'})
 
         # Save to Excel file
-        # df_sorted.to_excel(str(file_name)+'.xlsx', index=False)
+        df_sorted.to_excel(str(file_name)+'.xlsx', index=False)
         
         return df_sorted
 
@@ -125,25 +125,37 @@ def add_categories(df1, df2):
     df1['SUBCATEGORÍA'] = df1['Codigo_Diagnostico'].map(lambda x: mapping.get(x, {}).get('SUBCATEGORÍA'))
 
     # print(df1.head()) 
-    # df1.to_excel('output.xlsx', index=False)
+    df1.to_excel('output_ac.xlsx', index=False)
     return df1
 
 def order_by_category(df):
-    # Calcula la sumatoria de la columna "COUNT" para cada grupo de categorías
-    df_grouped = df.groupby('CATEGORÍA')['Count'].sum().reset_index()
-    df_grouped.columns = ['CATEGORÍA', 'SUM_COUNT']
+    """
+    Ordena un DataFrame por la columna 'CATEGORÍA', agrega una columna 'SUM_Count'
+    que contiene la sumatoria de la columna 'Count' por cada categoría,
+    y luego ordena las categorías de mayor a menor respecto a 'SUM_Count'.
+    :param df: DataFrame con los datos.
+    :return: DataFrame ordenado y con la columna 'SUM_Count' agregada.
+    """
+    if 'CATEGORÍA' not in df.columns:
+        raise ValueError("El DataFrame no contiene la columna 'CATEGORÍA'.")
 
-    # Ordena los grupos por la sumatoria en orden descendente
-    df_grouped = df_grouped.sort_values(by='SUM_COUNT', ascending=False)
+    if 'Count' not in df.columns:
+        raise ValueError("El DataFrame no contiene la columna 'Count'.")
 
-    # Une el DataFrame original con el DataFrame de grupos ordenados
-    df_ordered = pd.merge(df, df_grouped, on='CATEGORÍA')
+    # Calcular la sumatoria por categoría y agregar la columna 'SUM_Count'
+    df['SUM_COUNT'] = df.groupby('CATEGORÍA')['Count'].transform('sum')
 
-    # Ordena el DataFrame resultante por la sumatoria y luego por la columna "COUNT" en orden descendente
-    df_ordered = df_ordered.sort_values(by=['SUM_COUNT', 'Count'], ascending=[False, False])
-    
-    # df_ordered.to_excel('output.xlsx', index=False)
-    return df_ordered
+    # Ordenar el DataFrame por 'SUM_Count' en orden descendente y luego por 'CATEGORÍA'
+    df = df.sort_values(by=['SUM_COUNT', 'CATEGORÍA'], ascending=[False, True])
+
+    # Exportar a Excel
+    df.to_excel('output_bc.xlsx', index=False)
+
+    return df
+
+
+
+
 
 def add_percentage_column(df):
     df['PERCENTAGE_GROUP'] = (df['Count'] / df['SUM_COUNT']) * 100
@@ -153,7 +165,7 @@ def add_percentage_column(df):
 def add_total_count(df):
     total_count = df['Count'].sum()
     df['TOTAL_COUNT'] = total_count
-    # df.to_excel('output.xlsx', index=False)
+    df.to_excel('output.xlsx', index=False)
     return df
 
 def add_group_percentage_column(file_name, df):
@@ -174,17 +186,17 @@ def show_instructions():
 
 def mostrar_menu():
     print("[?] ¿Qué deseas hacer?")
-    print("[1] Crear archivo CID10")
-    print("[2] Cargar archivo CID10")
-    print("[3] Salir\n")
+    print("     [1] Crear archivo CID10")
+    print("     [2] Cargar archivo CID10")
+    print("     [3] Salir\n")
 
 def mostrar_menu_servicios():
     print("\n[?] ¿Qué deseas hacer?")
-    print("[1] Procesar Cirugía")
-    print("[2] Procesar Consulta Externa")
-    print("[3] Procesar Internación")
-    print("[4] Procesar Urgencias")
-    print("[5] Salir\n")
+    print("     [1] Procesar Cirugía")
+    print("     [2] Procesar Consulta Externa")
+    print("     [3] Procesar Internación")
+    print("     [4] Procesar Urgencias")
+    print("     [5] Salir\n")
 
 class Imprimir:
     def __init__(self):
@@ -223,6 +235,7 @@ def process_service(file_name, df2):
     df = order_by_category(df)
     df = add_percentage_column(df)
     df = add_total_count(df)
+
     df = add_group_percentage_column(file_name, df)
 
     df = combine_cells(df, file_name)
@@ -239,9 +252,9 @@ def ensure_directories_exist():
     for directory in directories:
         if not os.path.exists(directory):
             os.makedirs(directory)
-            print(f"Directorio '{directory}' creado exitosamente.")
+            print(f"[!] Directorio '{directory}' creado exitosamente.")
         else:
-            print(f"Directorio '{directory}' ya existe.")
+            print(f"[!] Directorio '{directory}' ya existe.")
 
 
 
@@ -330,7 +343,7 @@ def combine_cells(df, file_name):
     # Guardar el archivo Excel
     output_path = "Data-procesada/" + str(file_name) + "_processed.xlsx"
     wb.save(output_path)
-    print(f"Archivo con formato de porcentaje guardado en {output_path}")
+    print(f"[!] Archivo guardado en {output_path}")
 
     return df_updated
 
