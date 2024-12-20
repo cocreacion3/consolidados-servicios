@@ -1,11 +1,13 @@
 import pandas as pd
 import threading
 import time
+import os
 from tqdm import tqdm
 from rich import print
 from rich.progress import Progress
-
-
+from openpyxl import Workbook
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.styles import Alignment, NamedStyle
 
 
 surgery = "Cirugia"
@@ -160,9 +162,8 @@ def add_group_percentage_column(file_name, df):
     df.to_excel('Data-procesada/' + str(file_name) + '_processed.xlsx', index=False)
     return df
 
-
 def show_instructions():
-    print("[!] Instrucciones:")
+    print("\n[!] Instrucciones:")
     print("\n[!] Nombre de archivo CID10 base:")
     print("     CIE10\CIE10 AGRUPADO.xlsx\n")
     print("[!] Nombres de archivos base:")
@@ -170,11 +171,13 @@ def show_instructions():
     print("     Data-cruda\BD Consulta externa.xlsx.xlsx")
     print("     Data-cruda\BD Internación.xlsx.xlsx")
     print("     Data-cruda\BD Urgencias.xlsx\n")
+
 def mostrar_menu():
     print("[?] ¿Qué deseas hacer?")
     print("[1] Crear archivo CID10")
     print("[2] Cargar archivo CID10")
     print("[3] Salir\n")
+
 def mostrar_menu_servicios():
     print("\n[?] ¿Qué deseas hacer?")
     print("[1] Procesar Cirugía")
@@ -182,6 +185,7 @@ def mostrar_menu_servicios():
     print("[3] Procesar Internación")
     print("[4] Procesar Urgencias")
     print("[5] Salir\n")
+
 class Imprimir:
     def __init__(self):
         self.lock = threading.Lock()
@@ -189,6 +193,7 @@ class Imprimir:
     def imprimir(self, mensaje, end='\n'):
         with self.lock:
             print(mensaje, end=end)
+
 def mostrar_progreso(event, imprimir):
     spinner_chars = ['|', '/', '-', '\\']
     i = 0
@@ -197,6 +202,7 @@ def mostrar_progreso(event, imprimir):
         imprimir.imprimir(f"[!] Procesando...{char}", end='\r')
         i += 1
         time.sleep(0.1)
+
 def process_service(file_name, df2):
     imprimir = Imprimir()
 
@@ -219,9 +225,118 @@ def process_service(file_name, df2):
     df = add_total_count(df)
     df = add_group_percentage_column(file_name, df)
 
+    df = combine_cells(df, file_name)
     # Cuando se termina el procesamiento, señalizar al spinner que se detenga
     event.set()
+
+def ensure_directories_exist():
+    """
+    Verifica si existen las carpetas 'CIE10', 'Data-cruda', y 'Data-procesada'.
+    Si no existen, las crea.
+    """
+    directories = ["CIE10", "Data-cruda", "Data-procesada"]
+
+    for directory in directories:
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+            print(f"Directorio '{directory}' creado exitosamente.")
+        else:
+            print(f"Directorio '{directory}' ya existe.")
+
+
+
+def combine_cells(df, file_name):
+    """
+    Combina todas las celdas de la columna 'TOTAL_COUNT', luego combina las celdas de 'SUM_COUNT', 'GROUP_PERCENTAGE',
+    y 'CATEGORÍA' solo cuando tienen la misma 'CATEGORÍA'.
+    Retorna un DataFrame actualizado.
+    :param df: DataFrame con los datos.
+    :return: DataFrame actualizado con las celdas combinadas reflejadas.
+    """
+    if not isinstance(df, pd.DataFrame):
+        raise ValueError("El argumento 'df' debe ser un DataFrame.")
+
+    # Crear un archivo de Excel desde el DataFrame
+    wb = Workbook()
+    ws = wb.active
+
+    # Insertar encabezados y datos del DataFrame en el archivo de Excel
+    for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start=1):
+        ws.append(row)
+
+    # Obtener los índices de las columnas 'TOTAL_COUNT', 'SUM_COUNT', 'GROUP_PERCENTAGE' y 'CATEGORÍA'
+    header_row = 1
+    total_count_col = None
+    sum_count_col = None
+    group_percentage_col = None
+    category_col = None
+
+    for col_idx, cell in enumerate(ws[header_row], start=1):
+        if cell.value == "TOTAL_COUNT":
+            total_count_col = col_idx
+        if cell.value == "SUM_COUNT":
+            sum_count_col = col_idx
+        if cell.value == "GROUP_PERCENTAGE":
+            group_percentage_col = col_idx
+        if cell.value == "CATEGORÍA":
+            category_col = col_idx
+
+    if not total_count_col or not sum_count_col or not group_percentage_col or not category_col:
+        raise ValueError("No se encontraron las columnas 'TOTAL_COUNT', 'SUM_COUNT', 'GROUP_PERCENTAGE' o 'CATEGORÍA' en el DataFrame.")
+
+    # Combinar todas las celdas en la columna 'TOTAL_COUNT'
+    start_row = header_row + 1
+    ws.merge_cells(start_row=start_row, start_column=total_count_col, 
+                   end_row=ws.max_row, end_column=total_count_col)
+
+    # Centrar el texto de la celda fusionada en 'TOTAL_COUNT'
+    merged_cell = ws.cell(row=start_row, column=total_count_col)
+    merged_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Combinar celdas en 'SUM_COUNT', 'GROUP_PERCENTAGE', y 'CATEGORÍA' solo si tienen la misma 'CATEGORÍA'
+    current_category = None
+    start_merge_row = start_row
+
+    for row in range(start_row, ws.max_row + 1):
+        category_value = ws.cell(row=row, column=category_col).value
+
+        if category_value != current_category:
+            # Fusionar celdas anteriores si corresponde
+            if current_category is not None and row - 1 > start_merge_row:
+                for col in [sum_count_col, group_percentage_col, category_col]:
+                    ws.merge_cells(start_row=start_merge_row, start_column=col, 
+                                   end_row=row - 1, end_column=col)
+                    # Centrar el texto de la celda fusionada
+                    merged_cell = ws.cell(row=start_merge_row, column=col)
+                    merged_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            # Actualizar la categoría actual y la fila de inicio de fusión
+            current_category = category_value
+            start_merge_row = row
+
+    # Fusionar las últimas celdas si corresponde
+    if current_category is not None and ws.max_row > start_merge_row:
+        for col in [sum_count_col, group_percentage_col, category_col]:
+            ws.merge_cells(start_row=start_merge_row, start_column=col, 
+                           end_row=ws.max_row, end_column=col)
+            merged_cell = ws.cell(row=start_merge_row, column=col)
+            merged_cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    # Convertir de vuelta a DataFrame para devolver
+    data = ws.values
+    columns = next(data)  # Tomar encabezados
+    df_updated = pd.DataFrame(data, columns=columns)
+
+    # Guardar el archivo Excel
+    output_path = "Data-procesada/" + str(file_name) + "_processed.xlsx"
+    wb.save(output_path)
+    print(f"Archivo con formato de porcentaje guardado en {output_path}")
+
+    return df_updated
+
+
 def main():
+    ensure_directories_exist()
     show_instructions()
     show_first_menu = True
     while True:
@@ -271,18 +386,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-
-# df = load_data(file_name)
-# df = delete_columns(file_name, df)
-# df = remove_rows(file_name, df)
-# df = count_codes(file_name, df)
-
-# df2 = load_data(cid10_file)
-# df = add_categories(df , df2)
-# df = order_by_category(df)
-# df = add_percentage_column(df)
-# df = add_total_count(df)
-# df = add_group_percentage_column(file_name, df)
-
-# df = create_CID10()
